@@ -19,6 +19,7 @@ from preprocess import *
 from utils import *
 """TODO:
 1. batch size: deal with different sequence lengths
+2. Dataloader
 """
 
 class GRNN(nn.Module):
@@ -35,8 +36,8 @@ class GRNN(nn.Module):
         self.CUDA_use = CUDA_use
 
         self.embedding = nn.Embedding(input_size, embedding_size)
-        self.gru = nn.GRU(embedding_size, hidden_size, n_layer)
-        self.dropout = nn.Dropout(p=0.5)
+        self.gru = nn.GRU(embedding_size, hidden_size, n_layer, dropout=0.5)
+        #self.dropout = nn.Dropout(p=0.5)
         self.out = nn.Linear(hidden_size, label_size)
         self.softmax = nn.LogSoftmax()
 
@@ -46,8 +47,8 @@ class GRNN(nn.Module):
         seq_len = batch_word_seq.size()[1]
         embedded = self.embedding(batch_word_seq).view(seq_len, batch_size, -1)
         output, hidden = self.gru(embedded, hidden)
-        output = self.dropout(output)[-1].view(batch_size, seq_len, -1)
         #seq_len, batch, hidden_size -> batch, hidden_size
+        output = output[-1].view(batch_size, -1)
         output = self.softmax(self.out(output))
         #batch, label_size
         return output
@@ -59,31 +60,28 @@ class GRNN(nn.Module):
         else:
             hidden = Variable(torch.zeros(self.n_layer, batch_size,
             self.hidden_size))
+        return hidden
 
 def train(grnn, grnn_optimizer, criterion, input_variables, labels):
     #input_variables = seq_len * batch
-    batch_size = input_variables.size()[1]
+    batch_size = input_variables.size()[0]
     grnn_init_hidden = grnn.init_hidden(batch_size)
     grnn_optimizer.zero_grad()
     output = grnn(input_variables, grnn_init_hidden)
     # output shape = batch, label_size
-    loss = 0
-    for oi in range(batch_size):
-        topv, topi = output[oi].data.topk(1)
-        predicted = topi[0][0]
-        loss += criterion(output[oi], labels)
+    loss = criterion(output, labels)
     loss.backward()
     grnn_optimizer.step()
     return loss.data[0]/(batch_size*1.)
 
 def test(grnn, test_variables, test_labels):
-    batch_size = test_variables.size()[1] #1
+    batch_size = test_variables.size()[0] #1
     grnn_init_hidden = grnn.init_hidden(batch_size)
     output = grnn(test_variables, grnn_init_hidden)
     acc = 0
     for oi in range(batch_size):
         topv, topi = output[oi].data.topk(1)
-        predicted = topi[0][0]
+        predicted = topi[0]
         if predicted == test_labels.data[0]:
             acc += 1
     return acc / batch_size*1., predicted
@@ -117,24 +115,13 @@ if __name__ == "__main__":
         sentences = [line for line in f.readlines()]
     train_input_var, train_output_label, test_input_var,\
     test_output_label, test_sentence, train_input = \
-    prepareData(sentences, CUDA_use, MAX_LENGTH)
+    prepareData(sentences, "blogs", CUDA_use, MAX_LENGTH)
     if CUDA_use:
         train_output_label = Variable(torch.LongTensor(train_output_label)).cuda()
         test_output_label = Variable(torch.LongTensor(test_output_label)).cuda()
     else:
         train_output_label = Variable(torch.LongTensor(train_output_label))
         test_output_label = Variable(torch.LongTensor(test_output_label))
-
-    """
-    train_input_var = torch.LongTensor(train_input_var)
-    test_input_var = torch.LongTensor(test_input_var)
-    train_output_label = torch.LongTensor(train_output_label)
-    test_output_label = torch.LongTensor(test_output_label)
-    train = data_utils.TensorDataset(train_input_var, train_output_label)
-    test = data_utils.TensorDataset(test_input_var.data, test_output_label)
-    train_loader = data_utils.DataLoader(train, batch_size=mini_batch_size)
-    test_loader = data_utils.DataLoader(test, batch_size=mini_batch_size)
-    """
 
     # define model, criterion, and optimizer
     if CUDA_use:
@@ -157,14 +144,6 @@ if __name__ == "__main__":
     for epoch in range(n_epoch):
         for i, sentences in enumerate(train_input_var):
             n_iter += 1
-            """
-            if CUDA_use:
-                sentences = Variable(torch.LongTensor(sentences)).view\
-                (mini_batch_size,-1,1).cuda()
-            else:
-                sentences = Variable(torch.LongTensor(sentences)).view\
-                (mini_batch_size,-1,1)
-            """
             loss = train(grnn, grnn_optimizer, criterion, sentences, \
             train_output_label[i])
             print_loss_total += loss

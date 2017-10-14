@@ -5,6 +5,7 @@ vocabulary size limit
 import re
 import random
 import torch
+import json
 from torch.autograd import Variable
 from stanfordcorenlp import StanfordCoreNLP
 
@@ -79,6 +80,11 @@ def blogsToDictionary(sentences, MAX_LENGTH = 30):
     for key in dictionary:
         print(key + ':' + str(len(dictionary[key]['tokens'])))
     print('**************************************')
+    """
+    blogs_data = './blogs.json'
+    with open(blogs_data, 'r') as jsonfile:
+        dictionary = json.load(jsonfile)
+    """
     return dictionary
 
 def twitterToDictionary(sentences, MAX_LENGTH=30):
@@ -175,10 +181,10 @@ def changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB):
     #train_input_var = [idx_list for idx_list in train_input_idx]
 
     if CUDA_use:
-        train_input_var = [Variable(torch.LongTensor(idx_list).view(-1,1)).cuda()
+        train_input_var = [Variable(torch.LongTensor(idx_list).view(1,-1)).cuda()
         for idx_list in train_input_idx]
     else:
-        train_input_var = [Variable(torch.LongTensor(idx_list).view(-1,1))
+        train_input_var = [Variable(torch.LongTensor(idx_list).view(1,-1))
         for idx_list in train_input_idx]
 
     train_output_label = [[train_input.tag2idx[pair[1]]] for pair in train_pair]
@@ -195,10 +201,10 @@ def changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB):
     #test_input_var = [idx_list for idx_list in test_input_idx]
 
     if CUDA_use:
-        test_input_var = [Variable(torch.LongTensor(idx_list).view(-1,1)).cuda()
+        test_input_var = [Variable(torch.LongTensor(idx_list).view(1,-1)).cuda()
         for idx_list in test_input_idx]
     else:
-        test_input_var = [Variable(torch.LongTensor(idx_list).view(-1,1))
+        test_input_var = [Variable(torch.LongTensor(idx_list).view(1,-1))
         for idx_list in test_input_idx]
 
     test_output_label = [[train_input.tag2idx[pair[1]]] for pair in test_pair]
