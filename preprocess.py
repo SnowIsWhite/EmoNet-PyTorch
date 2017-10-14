@@ -16,8 +16,12 @@ class Preprocess:
         self.index2word = {0: 'UNK'}
         self.word2count = {}
         self.n_words = 1
-        self.tag2idx = {'ne': 0, 'hp': 1, 'sd': 2, 'ag': 3, 'dg': 4,
-                        'sp': 5, 'fr': 6}
+        if name == 'blogs':
+            self.tag2idx = {'ne': 0, 'hp': 1, 'sd': 2, 'ag': 3, 'dg': 4,
+            'sp': 5, 'fr': 6}
+        elif name == 'twitter':
+            self.tag2idx = {'anger': 0, 'disgust': 1, 'fear': 2, 'joy': 3,
+            'sadness': 4, 'surprise': 5}
 
     def addSentence(self, tokenized_sentence):
         for word in tokenized_sentence:
@@ -77,7 +81,50 @@ def blogsToDictionary(sentences, MAX_LENGTH = 30):
     print('**************************************')
     return dictionary
 
-def split_train_and_test_data(data, train = 0.8, test = 0.2):
+def twitterToDictionary(sentences, MAX_LENGTH=30):
+    # Twitter Emotion Corpus
+    nlp = StanfordCoreNLP('/Users/jaeickbae/Documents/projects/utils/stanford\
+-corenlp-full-2017-06-09')
+    dictionary = {'anger': {'tokens': [], 'sentences':[]},
+                'disgust': {'tokens': [], 'sentences':[]},
+                'fear': {'tokens': [], 'sentences':[]},
+                'joy': {'tokens': [], 'sentences':[]},
+                'sadness': {'tokens': [], 'sentences':[]},
+                'surprise': {'tokens': [], 'sentences':[]}}
+    min_length = MAX_LENGTH
+    max_length = MAX_LENGTH
+    longest_sentence = ''
+    for s in sentences:
+        phrase = s.split('\t')
+        # phrase[0]: twitter number
+        # phrase[1]: content
+        # phrase[2]: tag
+        tag = phrase[2][3:]
+        sentence = phrase[1]
+        filtered_sentence = filterText(sentence)
+        tokenized_sentence = nlp.word_tokenize(filtered_sentence)
+        if len(tokenized_sentence) < 5 or len(tokenized_sentence) > MAX_LENGTH:
+            continue
+        dictionary[tag]['tokens'].append(tokenized_sentence)
+        dictionary[tag]['sentences'].append(sentence)
+        if len(tokenized_sentence) < min_length:
+            min_length = len(tokenized_sentence)
+        if len(tokenized_sentence) >= max_length:
+            max_length = len(tokenized_sentence)
+            longest_sentence = sentence
+
+    #print stat
+    print('**************Statistics**************')
+    print('longest: ' + str(max_length))
+    print('shortest: '+ str(min_length))
+    print('Longest Sentence example: ' + longest_sentence)
+
+    for key in dictionary:
+        print(key + ':' + str(len(dictionary[key]['tokens'])))
+    print('**************************************')
+    return dictionary
+
+def splitTrainAndTestData(data, train = 0.8, test = 0.2):
     train_data = {}
     test_data = {}
     for key in data:
@@ -93,7 +140,7 @@ def split_train_and_test_data(data, train = 0.8, test = 0.2):
         test_data[key]['sentences'] = data[key]['sentences'][train_portion+1:]
     return train_data, test_data
 
-def get_pairs(train_data, test_data):
+def getPairs(train_data, test_data):
     train_pair = []
     test_pair = []
     test_sentence = []
@@ -111,10 +158,15 @@ def get_pairs(train_data, test_data):
     test_pair, test_sentence = zip(*zipped)
     return train_pair, test_pair, test_sentence
 
-def change_to_variables(train_pair, test_pair, CUDA_use):
-    train_input = Preprocess('train')
+def changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB):
+    train_input = Preprocess(data_name)
     for pair in train_pair:
         train_input.addSentence(pair[0])
+
+    # Vocabulary frequency check
+    print('train words ' + str(train_input.n_words))
+    if train_input.n_words > MAX_VOCAB:
+        pass
 
     train_input_idx = []
     for pair in train_pair:
@@ -151,11 +203,10 @@ def change_to_variables(train_pair, test_pair, CUDA_use):
 
     test_output_label = [[train_input.tag2idx[pair[1]]] for pair in test_pair]
 
-    print('train words ' + str(train_input.n_words))
     return train_input_var, train_output_label,\
     test_input_var, test_output_label, train_input
 
-def prepareData(sentence_list, CUDA_use = False, MAX_LENGTH=30, MAX_VOCAB=80000):
+def prepareData(sentence_list, data_name, CUDA_use = False, MAX_LENGTH=30, MAX_VOCAB=80000):
     # make dictionary
     # split into train and test data
     # make into pairs (train_pair, test_pair)
@@ -164,21 +215,25 @@ def prepareData(sentence_list, CUDA_use = False, MAX_LENGTH=30, MAX_VOCAB=80000)
     # return train_input_var, train_ouptut_label, test_input_var,
     # test_output_label, test_sentence
     print("Making into Dictionary...")
-    dictionary = blogsToDictionary(sentence_list, MAX_LENGTH)
+    if data_name == 'blogs':
+        dictionary = blogsToDictionary(sentence_list, MAX_LENGTH)
+    elif data_name == 'twitter':
+        dictionary = twitterToDictionary(sentence_list, MAX_LENGTH)
+    #dictionary: {'tag': {'tokens': [], 'sentences': []}}
     print("Chaning to Variables...")
-    train_data, test_data = split_train_and_test_data(dictionary)
-    train_pair, test_pair, test_sentence = get_pairs(train_data, test_data)
+    train_data, test_data = splitTrainAndTestData(dictionary)
+    train_pair, test_pair, test_sentence = getPairs(train_data, test_data)
     train_input_var, train_output_label, test_input_var, test_output_label,\
-    train_input = change_to_variables(train_pair, test_pair, CUDA_use)
+    train_input = changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB)
     print("Data Preparation Done.")
     return train_input_var, train_output_label, test_input_var,\
     test_output_label, test_sentence, train_input
 
-"""
+
 if __name__ == "__main__":
-    data = '/Users/jaeickbae/Documents/projects/2017 Affective Computing\
-/Emotion-Data/Benchmark/category_gold_std.txt'
-    with open(data, 'r') as f:
-        sentences = f.readlines()
-    prepareData(sentences)
-"""
+    data = '/Users/jaeickbae/Documents/projects/2017 Affective Computing/Jan9-2012-tweets-clean.txt'
+    with open(data, 'w') as f:
+        lines = f.readlines()
+        twitterToDictionary(lines)
+
+    #prepareData(lines, 'twitter')

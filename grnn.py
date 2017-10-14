@@ -6,15 +6,20 @@ Ekman's emotions instead of emotions defined by Plutchik."""
 import sys
 import os
 import time
+import json
+import pickle
 import torch
 import torch.nn as nn
 import torch.utils.data as data_utils
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torch import optim
+from sklearn.metrics import confusion_matrix
 from preprocess import *
 from utils import *
-
+"""TODO:
+1. batch size: deal with different sequence lengths
+"""
 
 class GRNN(nn.Module):
     def __init__(self, input_size, embedding_size, batch_size, hidden_size,
@@ -66,29 +71,36 @@ def train(grnn, grnn_optimizer, criterion, input_variables, labels):
     for oi in range(batch_size):
         topv, topi = output[oi].data.topk(1)
         predicted = topi[0][0]
-        loss += criterion(output[oi], labels[oi])
+        loss += criterion(output[oi], labels)
     loss.backward()
     grnn_optimizer.step()
     return loss.data[0]/(batch_size*1.)
 
 def test(grnn, test_variables, test_labels):
-    batch_size = test_variables.size()[1]
+    batch_size = test_variables.size()[1] #1
     grnn_init_hidden = grnn.init_hidden(batch_size)
-    output, hidden = grnn(test_variables, grnn_init_hidden)
+    output = grnn(test_variables, grnn_init_hidden)
     acc = 0
-    predict_results = []
     for oi in range(batch_size):
         topv, topi = output[oi].data.topk(1)
         predicted = topi[0][0]
-        predict_results.append(predicted)
-        if predicted == test_labels[oi]:
+        if predicted == test_labels.data[0]:
             acc += 1
-    return acc / batch_size*1., predict_results
+    return acc / batch_size*1., predicted
+
+def confusionMatrix(y_pred, y_true):
+    mat = confusion_matrix(y_true, y_pred)
+    fname = 'confusion_matrix.txt'
+    with open(fname, 'w') as f:
+        for row in mat:
+            for num in row:
+                f.write(str(num) + '\t')
+            f.write('\n')
 
 if __name__ == "__main__":
     CUDA_use = False
     UNK_token = 0
-    n_epoch = 7
+    n_epoch = 14
     n_iter = 100
     n_layer = 3
     embedding_size = 300
@@ -97,11 +109,11 @@ if __name__ == "__main__":
     mini_batch_size = 1
     learning_rate = 0.0001
     MAX_LENGTH = 30
-    data = '/Users/jaeickbae/Documents/projects/2017 Affective Computing\
+    blogs_data = '/Users/jaeickbae/Documents/projects/2017 Affective Computing\
 /Emotion-Data/Benchmark/category_gold_std.txt'
 
     # get data
-    with open(data, 'r') as f:
+    with open(blogs_data, 'r') as f:
         sentences = [line for line in f.readlines()]
     train_input_var, train_output_label, test_input_var,\
     test_output_label, test_sentence, train_input = \
@@ -170,6 +182,17 @@ if __name__ == "__main__":
                 plot_losses.append(plot_loss_avg)
                 plot_loss_total = 0
     showPlot(plot_losses)
-    # test
+
     # save model
-    torch.save(grnn.save_dict(), './grnn_model.pkl')
+    torch.save(grnn.state_dict(), './grnn_model.pkl')
+
+    # test
+    test_acc_total = 0
+    y_pred = []
+    for i in range(len(test_input_var)):
+        acc, predicted = test(grnn, test_input_var[i], test_output_label[i])
+        test_acc_total += acc
+        y_pred.append(predicted)
+    print('acc: ' + str(test_acc_total / (len(test_input_var)*1.)))
+    y_true = [label.data[0] for label in test_output_label]
+    confusionMatrix(y_pred, y_true)
