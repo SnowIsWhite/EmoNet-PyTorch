@@ -223,8 +223,8 @@ def changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB):
     return train_input_var, train_output_label,\
     test_input_var, test_output_label, train_input
 
-def prepareData(sentence_list, data_name, data_dir, CUDA_use = False,
-MAX_LENGTH=30, MAX_VOCAB=80000):
+def prepareData(data_name, data_dir, CUDA_use = False, MAX_LENGTH=30,
+MAX_VOCAB=80000):
     # make dictionary
     # split into train and test data
     # make into pairs (train_pair, test_pair)

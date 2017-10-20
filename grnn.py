@@ -111,7 +111,7 @@ if __name__ == "__main__":
     # get data
     train_input_var, train_output_label, test_input_var,\
     test_output_label, test_sentence, train_input = \
-    prepareData(sentences, data_name , blogs_data, CUDA_use, MAX_LENGTH)
+    prepareData(data_name , blogs_data, CUDA_use, MAX_LENGTH)
 
     train_output_label = Variable(torch.LongTensor(train_output_label))
     test_output_label = Variable(torch.LongTensor(test_output_label))
