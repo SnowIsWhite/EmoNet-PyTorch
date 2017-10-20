@@ -39,7 +39,7 @@ class Preprocess:
 
 def filterText(text):
     text = text.lower().strip()
-    text = re.sub(r"([.:;)(<>-_])", "", text)
+    text = re.sub(r"([.:;)(<>-_!?\"\'])", r"\1", text)
     text = text.strip()
     return text
 
@@ -77,14 +77,14 @@ def blogsToDictionary(sentences, MAX_LENGTH = 30):
     print('shortest: '+ str(min_length))
     print('Longest Sentence example: ' + longest_sentence)
 
+    total = 0
     for key in dictionary:
         print(key + ':' + str(len(dictionary[key]['tokens'])))
+        total += len(dictionary[key]['tokens'])
+    print('total : '+str(total))
     print('**************************************')
-    """
-    blogs_data = './blogs.json'
-    with open(blogs_data, 'r') as jsonfile:
-        dictionary = json.load(jsonfile)
-    """
+    with open('./blogs'+str(MAX_LENGTH)+'.json', 'w') as jsonfile:
+        json.dump(dictionary, jsonfile)
     return dictionary
 
 def twitterToDictionary(sentences, MAX_LENGTH=30):
@@ -105,7 +105,10 @@ def twitterToDictionary(sentences, MAX_LENGTH=30):
         # phrase[0]: twitter number
         # phrase[1]: content
         # phrase[2]: tag
-        tag = phrase[2][3:]
+        tag = phrase[2][3:].strip()
+        if tag not in dictionary:
+            print(tag)
+            continue
         sentence = phrase[1]
         filtered_sentence = filterText(sentence)
         tokenized_sentence = nlp.word_tokenize(filtered_sentence)
@@ -125,9 +128,15 @@ def twitterToDictionary(sentences, MAX_LENGTH=30):
     print('shortest: '+ str(min_length))
     print('Longest Sentence example: ' + longest_sentence)
 
+    total = 0
     for key in dictionary:
         print(key + ':' + str(len(dictionary[key]['tokens'])))
+        total += len(dictionary[key]['tokens'])
+    print('total : '+str(total))
     print('**************************************')
+
+    with open('./twitter'+str(MAX_LENGTH)+'.json', 'w') as jsonfile:
+        json.dump(dictionary, jsonfile)
     return dictionary
 
 def splitTrainAndTestData(data, train = 0.8, test = 0.2):
@@ -181,10 +190,11 @@ def changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB):
     #train_input_var = [idx_list for idx_list in train_input_idx]
 
     if CUDA_use:
-        train_input_var = [Variable(torch.LongTensor(idx_list).view(1,-1)).cuda()
+        train_input_var = \
+        [Variable(torch.LongTensor(idx_list).unsqueeze(0)).cuda()
         for idx_list in train_input_idx]
     else:
-        train_input_var = [Variable(torch.LongTensor(idx_list).view(1,-1))
+        train_input_var = [Variable(torch.LongTensor(idx_list).unsqueeze(0))
         for idx_list in train_input_idx]
 
     train_output_label = [[train_input.tag2idx[pair[1]]] for pair in train_pair]
@@ -201,10 +211,11 @@ def changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB):
     #test_input_var = [idx_list for idx_list in test_input_idx]
 
     if CUDA_use:
-        test_input_var = [Variable(torch.LongTensor(idx_list).view(1,-1)).cuda()
+        test_input_var = \
+        [Variable(torch.LongTensor(idx_list).unsqueeze(0)).cuda()
         for idx_list in test_input_idx]
     else:
-        test_input_var = [Variable(torch.LongTensor(idx_list).view(1,-1))
+        test_input_var = [Variable(torch.LongTensor(idx_list).unsqueeze(0))
         for idx_list in test_input_idx]
 
     test_output_label = [[train_input.tag2idx[pair[1]]] for pair in test_pair]
@@ -212,7 +223,8 @@ def changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB):
     return train_input_var, train_output_label,\
     test_input_var, test_output_label, train_input
 
-def prepareData(sentence_list, data_name, CUDA_use = False, MAX_LENGTH=30, MAX_VOCAB=80000):
+def prepareData(sentence_list, data_name, data_dir, CUDA_use = False,
+MAX_LENGTH=30, MAX_VOCAB=80000):
     # make dictionary
     # split into train and test data
     # make into pairs (train_pair, test_pair)
@@ -222,24 +234,38 @@ def prepareData(sentence_list, data_name, CUDA_use = False, MAX_LENGTH=30, MAX_V
     # test_output_label, test_sentence
     print("Making into Dictionary...")
     if data_name == 'blogs':
-        dictionary = blogsToDictionary(sentence_list, MAX_LENGTH)
+        try:
+            with open('./blogs'+str(MAX_LENGTH)+'.json', 'r') as jsonfile:
+                dictionary = json.load(jsonfile)
+        except:
+            with open(data_dir, 'r') as f:
+                sentence_list = f.readlines()
+            dictionary = blogsToDictionary(sentence_list, MAX_LENGTH)
     elif data_name == 'twitter':
-        dictionary = twitterToDictionary(sentence_list, MAX_LENGTH)
+        try:
+            with open('./twitter'+str(MAX_LENGTH)+'.json', 'r') as jsonfile:
+                dictionary = json.load(jsonfile)
+        except:
+            with open(data_dir, 'r') as f:
+                sentence_list = f.readlines()
+            dictionary = twitterToDictionary(sentence_list, MAX_LENGTH)
     #dictionary: {'tag': {'tokens': [], 'sentences': []}}
     print("Chaning to Variables...")
     train_data, test_data = splitTrainAndTestData(dictionary)
     train_pair, test_pair, test_sentence = getPairs(train_data, test_data)
     train_input_var, train_output_label, test_input_var, test_output_label,\
-    train_input = changeToVariables(train_pair, test_pair, CUDA_use, data_name, MAX_VOCAB)
+    train_input = changeToVariables(train_pair, test_pair, CUDA_use, data_name,
+    MAX_VOCAB)
     print("Data Preparation Done.")
     return train_input_var, train_output_label, test_input_var,\
     test_output_label, test_sentence, train_input
 
-
+"""
 if __name__ == "__main__":
-    data = '/Users/jaeickbae/Documents/projects/2017 Affective Computing/Jan9-2012-tweets-clean.txt'
-    with open(data, 'w') as f:
+    twitter_data_dir = '/Users/jaeickbae/Documents/projects/'+\
+    '2017 Affective Computing/Jan9-2012-tweets-clean.txt'
+    blogs_data_dir = '/Users/jaeickbae/Documents/projects/2017 Affective Computing/Emotion-Data/Benchmark/category_gold_std.txt'
+    with open(blogs_data_dir, 'r') as f:
         lines = f.readlines()
-        twitterToDictionary(lines)
-
-    #prepareData(lines, 'twitter')
+    prepareData(lines, 'blogs', blogs_data_dir, MAX_LENGTH=30)
+"""

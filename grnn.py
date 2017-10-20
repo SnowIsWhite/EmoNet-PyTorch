@@ -1,7 +1,7 @@
 """GRNN implementation for fine-grained emotion classification."""
-"""We use blogs data instead of twitter data annotated and used in the paper.
-Furthermore, I used Ekman's emotion set since blogs data is annotated with
-Ekman's emotions instead of emotions defined by Plutchik."""
+"""We use various other data instead of twitter data annotated and used in the
+paper. Furthermore, Ekman's emotion set is used instead of emotion categories
+ defined by Plutchik."""
 
 import sys
 import os
@@ -10,25 +10,20 @@ import json
 import pickle
 import torch
 import torch.nn as nn
-import torch.utils.data as data_utils
 from torch.autograd import Variable
 import torch.nn.functional as F
 from torch import optim
 from sklearn.metrics import confusion_matrix
 from preprocess import *
 from utils import *
-"""TODO:
-1. batch size: deal with different sequence lengths
-2. Dataloader
-"""
 
 class GRNN(nn.Module):
-    def __init__(self, input_size, embedding_size, batch_size, hidden_size,
+    def __init__(self, input_size, embedding_size, mini_batch_size, hidden_size,
      label_size, MAX_LENGTH, n_layer=1, CUDA_use=False):
         super(GRNN, self).__init__()
         self.input_size = input_size
         self.embedding_size = embedding_size
-        self.batch_size = batch_size
+        self.mini_batch_size = mini_batch_size
         self.hidden_size = hidden_size
         self.label_size = label_size
         self.MAX_LENGTH = MAX_LENGTH
@@ -36,8 +31,7 @@ class GRNN(nn.Module):
         self.CUDA_use = CUDA_use
 
         self.embedding = nn.Embedding(input_size, embedding_size)
-        self.gru = nn.GRU(embedding_size, hidden_size, n_layer, dropout=0.5)
-        #self.dropout = nn.Dropout(p=0.5)
+        self.gru = nn.GRU(embedding_size, hidden_size, n_layer, dropout=0.1)
         self.out = nn.Linear(hidden_size, label_size)
         self.softmax = nn.LogSoftmax()
 
@@ -48,22 +42,23 @@ class GRNN(nn.Module):
         embedded = self.embedding(batch_word_seq).view(seq_len, batch_size, -1)
         output, hidden = self.gru(embedded, hidden)
         #seq_len, batch, hidden_size -> batch, hidden_size
+        # use last output
         output = output[-1].view(batch_size, -1)
         output = self.softmax(self.out(output))
         #batch, label_size
         return output
 
-    def init_hidden(self, batch_size):
+    def init_hidden(self, mini_batch_size):
         if self.CUDA_use:
-            hidden = Variable(torch.zeros(self.n_layer, batch_size,
+            hidden = Variable(torch.zeros(self.n_layer, mini_batch_size,
             self.hidden_size)).cuda()
         else:
-            hidden = Variable(torch.zeros(self.n_layer, batch_size,
+            hidden = Variable(torch.zeros(self.n_layer, mini_batch_size,
             self.hidden_size))
         return hidden
 
 def train(grnn, grnn_optimizer, criterion, input_variables, labels):
-    #input_variables = seq_len * batch
+    #input_variables = batch(1) * seq_len
     batch_size = input_variables.size()[0]
     grnn_init_hidden = grnn.init_hidden(batch_size)
     grnn_optimizer.zero_grad()
@@ -75,6 +70,7 @@ def train(grnn, grnn_optimizer, criterion, input_variables, labels):
     return loss.data[0]/(batch_size*1.)
 
 def test(grnn, test_variables, test_labels):
+    grnn.train(False)
     batch_size = test_variables.size()[0] #1
     grnn_init_hidden = grnn.init_hidden(batch_size)
     output = grnn(test_variables, grnn_init_hidden)
@@ -84,11 +80,12 @@ def test(grnn, test_variables, test_labels):
         predicted = topi[0]
         if predicted == test_labels.data[0]:
             acc += 1
+    grnn.train(True)
     return acc / batch_size*1., predicted
 
 def confusionMatrix(y_pred, y_true):
     mat = confusion_matrix(y_true, y_pred)
-    fname = 'confusion_matrix.txt'
+    fname = 'confusion_twitter_matrix.txt'
     with open(fname, 'w') as f:
         for row in mat:
             for num in row:
@@ -107,29 +104,25 @@ if __name__ == "__main__":
     mini_batch_size = 1
     learning_rate = 0.0001
     MAX_LENGTH = 30
+    data_name = 'blogs'
     blogs_data = '/Users/jaeickbae/Documents/projects/2017 Affective Computing\
 /Emotion-Data/Benchmark/category_gold_std.txt'
 
     # get data
-    with open(blogs_data, 'r') as f:
-        sentences = [line for line in f.readlines()]
     train_input_var, train_output_label, test_input_var,\
     test_output_label, test_sentence, train_input = \
-    prepareData(sentences, "blogs", CUDA_use, MAX_LENGTH)
-    if CUDA_use:
-        train_output_label = Variable(torch.LongTensor(train_output_label)).cuda()
-        test_output_label = Variable(torch.LongTensor(test_output_label)).cuda()
-    else:
-        train_output_label = Variable(torch.LongTensor(train_output_label))
-        test_output_label = Variable(torch.LongTensor(test_output_label))
+    prepareData(sentences, data_name , blogs_data, CUDA_use, MAX_LENGTH)
 
-    # define model, criterion, and optimizer
+    train_output_label = Variable(torch.LongTensor(train_output_label))
+    test_output_label = Variable(torch.LongTensor(test_output_label))
     if CUDA_use:
-        grnn = GRNN(train_input.n_words, embedding_size, mini_batch_size,\
-        hidden_size, label_size, MAX_LENGTH, n_layer, CUDA_use).cuda()
-    else:
-        grnn = GRNN(train_input.n_words, embedding_size, mini_batch_size,\
-        hidden_size, label_size, MAX_LENGTH, n_layer, CUDA_use)
+        train_output_label = train_output_label.cuda()
+        test_output_label = test_output_label.cuda()
+    # define model, criterion, and optimizer
+    grnn = GRNN(train_input.n_words, embedding_size, mini_batch_size,\
+    hidden_size, label_size, MAX_LENGTH, n_layer, CUDA_use)
+    if CUDA_use:
+        grnn = grnn.cuda()
     criterion = nn.CrossEntropyLoss()
     grnn_optimizer = torch.optim.Adam(grnn.parameters(), lr=learning_rate)
 
@@ -144,7 +137,7 @@ if __name__ == "__main__":
     for epoch in range(n_epoch):
         for i, sentences in enumerate(train_input_var):
             n_iter += 1
-            loss = train(grnn, grnn_optimizer, criterion, sentences, \
+            loss = train(grnn, grnn_optimizer, criterion, sentences,\
             train_output_label[i])
             print_loss_total += loss
             plot_loss_total += loss
@@ -160,10 +153,10 @@ if __name__ == "__main__":
                 plot_loss_avg = plot_loss_total / (plot_every*1.)
                 plot_losses.append(plot_loss_avg)
                 plot_loss_total = 0
-    showPlot(plot_losses)
+    fname = data_name + str(MAX_LENGTH)
+    showPlot(plot_losses, fname + '_loss.png')
 
-    # save model
-    torch.save(grnn.state_dict(), './grnn_model.pkl')
+    torch.save(grnn.state_dict(), fname + '_model.pkl')
 
     # test
     test_acc_total = 0
