@@ -76,6 +76,7 @@ def test(grnn, test_variables, test_labels):
     batch_size = test_variables.size()[0] #1
     grnn_init_hidden = grnn.init_hidden(batch_size)
     output = grnn(test_variables, grnn_init_hidden)
+    output = nn.LogSoftmax(output)
     acc = 0
     for oi in range(batch_size):
         topv, topi = output[oi].data.topk(1)
