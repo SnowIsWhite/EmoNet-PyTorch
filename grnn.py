@@ -76,14 +76,14 @@ def test(grnn, test_variables, test_labels):
     batch_size = test_variables.size()[0] #1
     grnn_init_hidden = grnn.init_hidden(batch_size)
     output = grnn(test_variables, grnn_init_hidden)
-    output = nn.LogSoftmax(output)
+    softmax = nn.LogSoftmax()
+    output = softmax(output)
     acc = 0
     for oi in range(batch_size):
         topv, topi = output[oi].data.topk(1)
         predicted = topi[0]
         if predicted == test_labels.data[0]:
             acc += 1
-    grnn.train(True)
     return acc / batch_size*1., predicted
 
 def confusionMatrix(y_pred, y_true, fname):
@@ -107,7 +107,6 @@ if __name__ == "__main__":
     n_layer = 3
     embedding_size = 300
     hidden_size = 1000
-    label_size = 7
     mini_batch_size = 1
     learning_rate = 0.0001
     MAX_LENGTH = 30
@@ -126,6 +125,8 @@ if __name__ == "__main__":
     if CUDA_use:
         train_output_label = train_output_label.cuda()
         test_output_label = test_output_label.cuda()
+
+    label_size = len(train_input.tag2idx)
     # define model, criterion, and optimizer
     grnn = GRNN(train_input.n_words, embedding_size, mini_batch_size,\
     hidden_size, label_size, MAX_LENGTH, n_layer, CUDA_use)
@@ -135,6 +136,7 @@ if __name__ == "__main__":
     grnn_optimizer = torch.optim.Adam(grnn.parameters(), lr=learning_rate)
 
     # train
+    print("Training...")
     start = time.time()
     plot_losses = []
     plot_loss_total = 0
@@ -167,6 +169,7 @@ if __name__ == "__main__":
     torch.save(grnn.state_dict(), fname + '_model.pkl')
 
     # test
+    print("Start Testing...")
     test_acc_total = 0
     y_pred = []
     for i in range(len(test_input_var)):
