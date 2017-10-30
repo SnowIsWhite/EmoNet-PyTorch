@@ -35,7 +35,7 @@ class GRNN(nn.Module):
         self.embedding = nn.Embedding(input_size, embedding_size)
         self.gru = nn.GRU(embedding_size, hidden_size, n_layer, dropout=0.1)
         self.out = nn.Linear(hidden_size, label_size)
-        self.softmax = nn.LogSoftmax()
+        #self.softmax = nn.LogSoftmax()
 
     def forward(self, batch_word_seq, hidden):
         # batch_word_seq is a variable
@@ -46,7 +46,7 @@ class GRNN(nn.Module):
         #seq_len, batch, hidden_size -> batch, hidden_size
         # use last output
         output = output[-1].view(batch_size, -1)
-        output = self.softmax(self.out(output))
+        output = self.out(output)
         #batch, label_size
         return output
 
