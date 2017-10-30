@@ -1,13 +1,13 @@
 """Produces word-index dictionary."""
-"""TODO
-vocabulary size limit
-"""
+import sys
 import re
 import random
 import torch
 import json
 from torch.autograd import Variable
 from stanfordcorenlp import StanfordCoreNLP
+reload(sys)
+sys.setdefaultencoding('UTF8')
 
 UNK_token = 0
 class Preprocess:
@@ -23,6 +23,8 @@ class Preprocess:
         elif name == 'twitter':
             self.tag2idx = {'anger': 0, 'disgust': 1, 'fear': 2, 'joy': 3,
             'sadness': 4, 'surprise': 5}
+        elif name == 'bopang':
+            self.tag2idx = {'ne': 0, 'po': 1}
 
     def addSentence(self, tokenized_sentence):
         for word in tokenized_sentence:
@@ -139,6 +141,67 @@ def twitterToDictionary(sentences, MAX_LENGTH=30):
         json.dump(dictionary, jsonfile)
     return dictionary
 
+def bopangToDictionary(sentences_ne, sentences_po, MAX_LENGTH=30):
+    # Twitter Emotion Corpus
+    nlp = StanfordCoreNLP('/Users/jaeickbae/Documents/projects/utils/stanford\
+-corenlp-full-2017-06-09')
+    dictionary = {'ne': {'tokens': [], 'sentences':[]},
+                'po': {'tokens': [], 'sentences':[]}}
+    min_length = MAX_LENGTH
+    max_length = MAX_LENGTH
+    longest_sentence = ''
+    for s in sentences_ne:
+        try:
+            s.encode('utf-8')
+            s.decode('utf-8')
+        except:
+            continue
+        filtered_sentence = filterText(s)
+        tokenized_sentence = nlp.word_tokenize(filtered_sentence)
+        if len(tokenized_sentence) < 5 or len(tokenized_sentence) > MAX_LENGTH:
+            continue
+        dictionary['ne']['tokens'].append(tokenized_sentence)
+        dictionary['ne']['sentences'].append(s)
+        if len(tokenized_sentence) < min_length:
+            min_length = len(tokenized_sentence)
+        if len(tokenized_sentence) >= max_length:
+            max_length = len(tokenized_sentence)
+            longest_sentence = s
+
+    for s in sentences_po:
+        try:
+            s.encode('utf-8')
+            s.decode('utf-8')
+        except:
+            continue
+        filtered_sentence = filterText(s)
+        tokenized_sentence = nlp.word_tokenize(filtered_sentence)
+        if len(tokenized_sentence) < 5 or len(tokenized_sentence) > MAX_LENGTH:
+            continue
+        dictionary['po']['tokens'].append(tokenized_sentence)
+        dictionary['po']['sentences'].append(s)
+        if len(tokenized_sentence) < min_length:
+            min_length = len(tokenized_sentence)
+        if len(tokenized_sentence) >= max_length:
+            max_length = len(tokenized_sentence)
+            longest_sentence = s
+
+    #print stat
+    print('**************Statistics**************')
+    print('longest: ' + str(max_length))
+    print('shortest: '+ str(min_length))
+    print('Longest Sentence example: ' + longest_sentence)
+
+    total = 0
+    for key in dictionary:
+        print(key + ':' + str(len(dictionary[key]['tokens'])))
+        total += len(dictionary[key]['tokens'])
+    print('total : '+str(total))
+    print('**************************************')
+    with open('./bopang'+str(MAX_LENGTH)+'.json', 'w') as jsonfile:
+        json.dump(dictionary, jsonfile, ensure_ascii=False)
+    return dictionary
+
 def splitTrainAndTestData(data, train = 0.8, test = 0.2):
     train_data = {}
     test_data = {}
@@ -249,6 +312,17 @@ MAX_VOCAB=80000):
             with open(data_dir, 'r') as f:
                 sentence_list = f.readlines()
             dictionary = twitterToDictionary(sentence_list, MAX_LENGTH)
+    elif data_name == 'bopang':
+        try:
+            with open('./bopang' + str(MAX_LENGTH) + '.json', 'r') as jsonfile:
+                dictionary = json.load(jsonfile)
+        except:
+            with open(data_dir + '/rt-polarity.neg', 'r') as f:
+                sentence_neg = f.readlines()
+            with open(data_dir + '/rt-polarity.pos', 'r') as f:
+                sentence_pos = f.readlines()
+            dictionary = bopangToDictionary(sentence_neg, sentence_pos,
+            MAX_LENGTH)
     #dictionary: {'tag': {'tokens': [], 'sentences': []}}
     print("Chaning to Variables...")
     train_data, test_data = splitTrainAndTestData(dictionary)
@@ -265,7 +339,6 @@ if __name__ == "__main__":
     twitter_data_dir = '/Users/jaeickbae/Documents/projects/'+\
     '2017 Affective Computing/Jan9-2012-tweets-clean.txt'
     blogs_data_dir = '/Users/jaeickbae/Documents/projects/2017 Affective Computing/Emotion-Data/Benchmark/category_gold_std.txt'
-    with open(blogs_data_dir, 'r') as f:
-        lines = f.readlines()
-    prepareData(lines, 'blogs', blogs_data_dir, MAX_LENGTH=30)
+    bopang_data_dir = '/Users/jaeickbae/Documents/projects/data/bopang_twitter/rt-polaritydata/'
+    prepareData('bopang', bopang_data_dir, MAX_LENGTH=30)
 """
