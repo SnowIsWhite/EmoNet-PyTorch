@@ -1,5 +1,7 @@
 import time
 import math
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
@@ -16,10 +18,10 @@ def timeSince(since, percent):
     rs = es - s
     return '%s (- %s)' % (asMinutes(s), asMinutes(rs))
 
-def showPlot(points):
+def showPlot(points, fig_name):
     plt.figure()
     fig, ax = plt.subplots()
     loc = ticker.MultipleLocator(base=0.2)
     ax.yaxis.set_major_locator(loc)
     plt.plot(points)
-    fig.savefig('./loss.png')
+    fig.savefig(fig_name)
