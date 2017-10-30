@@ -113,11 +113,12 @@ if __name__ == "__main__":
     data_name = 'bopang'
     blogs_data = '/Users/jaeickbae/Documents/projects/2017 Affective Computing\
 /Emotion-Data/Benchmark/category_gold_std.txt'
+    bopang_data = '/Users/jaeickbae/Documents/projects/data/bopang_twitter/rt-polaritydata'
 
     # get data
     train_input_var, train_output_label, test_input_var,\
     test_output_label, test_sentence, train_input = \
-    prepareData(data_name , blogs_data, CUDA_use, MAX_LENGTH)
+    prepareData(data_name , bopang_data, CUDA_use, MAX_LENGTH)
 
     train_output_label = Variable(torch.LongTensor(train_output_label))
     test_output_label = Variable(torch.LongTensor(test_output_label))
@@ -159,8 +160,6 @@ if __name__ == "__main__":
                 plot_loss_avg = plot_loss_total / (plot_every*1.)
                 plot_losses.append(plot_loss_avg)
                 plot_loss_total = 0
-            break
-        break
     fname = data_name + str(MAX_LENGTH)
     showPlot(plot_losses, fname + '_loss.png')
 
