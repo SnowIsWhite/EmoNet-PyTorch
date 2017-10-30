@@ -14,8 +14,10 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from torch import optim
 from sklearn.metrics import confusion_matrix
+from sklearn.metrics import precision_recall_fscore_support
 from preprocess import *
 from utils import *
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 class GRNN(nn.Module):
     def __init__(self, input_size, embedding_size, mini_batch_size, hidden_size,
@@ -83,17 +85,21 @@ def test(grnn, test_variables, test_labels):
     grnn.train(True)
     return acc / batch_size*1., predicted
 
-def confusionMatrix(y_pred, y_true):
+def confusionMatrix(y_pred, y_true, fname):
     mat = confusion_matrix(y_true, y_pred)
-    fname = 'confusion_twitter_matrix.txt'
+    precision, recall, fscore, _ = \
+    precision_recall_fscore_support(y_true, y_pred)
     with open(fname, 'w') as f:
         for row in mat:
             for num in row:
                 f.write(str(num) + '\t')
             f.write('\n')
+        f.write('\n')
+        for idx, item in enumerate(precision):
+            f.write(str(item)+'\t'+str(recall[idx])+'\t'+str(fscore[idx])+'\n')
 
 if __name__ == "__main__":
-    CUDA_use = False
+    CUDA_use = True
     UNK_token = 0
     n_epoch = 14
     n_iter = 100
@@ -104,7 +110,7 @@ if __name__ == "__main__":
     mini_batch_size = 1
     learning_rate = 0.0001
     MAX_LENGTH = 30
-    data_name = 'blogs'
+    data_name = 'bopang'
     blogs_data = '/Users/jaeickbae/Documents/projects/2017 Affective Computing\
 /Emotion-Data/Benchmark/category_gold_std.txt'
 
@@ -153,6 +159,8 @@ if __name__ == "__main__":
                 plot_loss_avg = plot_loss_total / (plot_every*1.)
                 plot_losses.append(plot_loss_avg)
                 plot_loss_total = 0
+            break
+        break
     fname = data_name + str(MAX_LENGTH)
     showPlot(plot_losses, fname + '_loss.png')
 
@@ -167,4 +175,4 @@ if __name__ == "__main__":
         y_pred.append(predicted)
     print('acc: ' + str(test_acc_total / (len(test_input_var)*1.)))
     y_true = [label.data[0] for label in test_output_label]
-    confusionMatrix(y_pred, y_true)
+    confusionMatrix(y_pred, y_true, fname +'_confusion.txt')
